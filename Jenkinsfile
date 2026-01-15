@@ -2,75 +2,77 @@ pipeline {
     agent any
 
     environment {
-        BACKEND_VENV = "${WORKSPACE}/backend/venv"
+        // Set Python version if needed
+        PYTHON_VERSION = "3.11"
+        VENV_DIR = "venv"
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Build') {
             steps {
-                echo "Cloning repository..."
-                git branch: 'main', url: 'https://github.com/surendra039/TravelMemory.git'
+                echo 'Setting up Python environment and installing dependencies...'
+
+                // Create virtual environment
+                sh "python${PYTHON_VERSION} -m venv ${VENV_DIR}"
+
+                // Activate virtual environment and install requirements
+                sh """
+                source ${VENV_DIR}/bin/activate
+                pip install --upgrade pip
+                pip install -r requirements.txt
+                """
             }
         }
 
-        stage('Backend Build') {
+        stage('Test') {
             steps {
-                echo "Setting up Python virtual environment and installing backend dependencies..."
-                sh '''
-                    python3 -m venv "$BACKEND_VENV"
-                    . "$BACKEND_VENV/bin/activate"
-                    pip install --upgrade pip
-                    pip install -r backend/requirements.txt
-                '''
+                echo 'Running unit tests...'
+
+                // Run pytest inside virtual environment
+                sh """
+                source ${VENV_DIR}/bin/activate
+                pytest --maxfail=1 --disable-warnings -q
+                """
+            }
+
+            post {
+                // Archive test results even if tests fail
+                always {
+                    junit '**/test-results/*.xml'  // optional if pytest produces XML
+                }
             }
         }
 
-        stage('Backend Test') {
-            steps {
-                echo "Running backend tests..."
-                sh '''
-                    . "$BACKEND_VENV/bin/activate"
-                    pytest backend/tests || echo "No tests found or tests failed"
-                '''
+        stage('Deploy') {
+            when {
+                expression {
+                    // Only deploy if tests passed
+                    currentBuild.currentResult == 'SUCCESS'
+                }
             }
-        }
-
-        stage('Backend Deploy') {
             steps {
-                echo "Deploying backend Flask application..."
-                sh '''
-                    . "$BACKEND_VENV/bin/activate"
-                    nohup python3 backend/app.py &
-                '''
-            }
-        }
+                echo 'Deploying to staging environment...'
 
-        stage('Frontend Build & Deploy') {
-            steps {
-                echo "Building and deploying frontend..."
-                sh '''
-                    # Move to frontend folder
-                    cd frontend
-
-                    # Install Node dependencies
-                    if [ -f package.json ]; then
-                        npm install
-                        npm run build || echo "Frontend build failed"
-                    fi
-
-                    # Deploy: Copy build folder to a deployment location (adjust path as needed)
-                    # Example: cp -r build /var/www/html/frontend
-                '''
+                // Example: run a deployment script
+                sh """
+                source ${VENV_DIR}/bin/activate
+                bash deploy_staging.sh
+                """
             }
         }
     }
 
     post {
+        always {
+            echo 'Cleaning up...'
+            sh "rm -rf ${VENV_DIR}"
+        }
         success {
-            echo "Pipeline completed successfully. Backend and Frontend deployed!"
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            echo "Pipeline failed. Check Jenkins console for details."
+            echo 'Pipeline failed. Check the logs for details.'
         }
     }
 }
