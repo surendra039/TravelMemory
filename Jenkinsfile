@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        VENV = "${WORKSPACE}/venv"
+        VENV = "${WORKSPACE}/venv"  // Path for Python virtual environment
     }
 
     stages {
@@ -17,9 +17,16 @@ pipeline {
             steps {
                 echo "Setting up Python environment and installing dependencies..."
                 sh '''
-                    python3 -m venv $VENV
-                    source $VENV/bin/activate
+                    # Create virtual environment
+                    python3 -m venv "$VENV"
+
+                    # Activate virtual environment
+                    . "$VENV/bin/activate"
+
+                    # Upgrade pip
                     pip install --upgrade pip
+
+                    # Install dependencies
                     pip install -r backend/requirements.txt
                 '''
             }
@@ -29,7 +36,10 @@ pipeline {
             steps {
                 echo "Running backend tests..."
                 sh '''
-                    source $VENV/bin/activate
+                    # Activate virtual environment
+                    . "$VENV/bin/activate"
+
+                    # Run pytest for backend
                     pytest backend/tests
                 '''
             }
@@ -37,9 +47,12 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo "Deploying Flask backend..."
+                echo "Deploying backend Flask application..."
                 sh '''
-                    source $VENV/bin/activate
+                    # Activate virtual environment
+                    . "$VENV/bin/activate"
+
+                    # Start backend app in background
                     nohup python3 backend/app.py &
                 '''
             }
@@ -48,10 +61,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully. Application deployed."
+            echo "Pipeline completed successfully. Application deployed!"
         }
         failure {
-            echo "Pipeline failed. Check errors in Jenkins console."
+            echo "Pipeline failed. Check Jenkins console for details."
         }
     }
 }
